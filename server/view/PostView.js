@@ -3,6 +3,7 @@ import Comment from "../model/CommentModel.js";
 import Like from "../model/LikeModel.js";
 import User from "../model/UserModel.js";
 import Follow from "../model/FollowModel.js";
+import Notification from "../model/NotificationModel.js";
 
 export const getAllPostsAsAdmin = (req, res) => {
   const posts = [];
@@ -240,20 +241,42 @@ export const likePost = (req, res) => {
     if (!post) {
       return res.status(404).json({ error: "Post not found" });
     } else {
-      Like.findOne({ post: postId, user: likeData.user }).then((like) => {
+      Like.findOne({
+        post: postId,
+        "user.username": likeData.user.username,
+      }).then((like) => {
         if (like) {
           like.delete();
           post.likeCount -= 1;
-          post.save().then((doc) => {
-            return res.json(doc);
-          });
+          Notification.findOne({
+            "sender.username": req.user.username,
+            recipient: post.user.username,
+            type: "liked",
+            post: post._id,
+          })
+            .then((not) => {
+              not.delete();
+            })
+            .then(() => {
+              post.save().then((doc) => {
+                return res.json(doc);
+              });
+            });
         } else {
           const newLike = new Like(likeData);
 
           newLike.save().then(() => {
             post.likeCount += 1;
-            post.save().then((doc) => {
-              return res.json(doc);
+            const newNot = new Notification({
+              sender: req.user,
+              recipient: post.user.username,
+              post: post._id,
+              type: "liked",
+            });
+            newNot.save().then(() => {
+              post.save().then((doc) => {
+                return res.json(doc);
+              });
             });
           });
         }

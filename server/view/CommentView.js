@@ -1,6 +1,6 @@
 import Post from "../model/PostModel.js";
 import Comment from "../model/CommentModel.js";
-import Like from "../model/LikeModel.js";
+import Notification from "../model/NotificationModel.js";
 
 export const createComment = (req, res) => {
   const postId = req.params.id;
@@ -18,14 +18,34 @@ export const createComment = (req, res) => {
     } else {
       post.commentCount += 1;
       post.save().then(() => {
-        newComment
-          .save()
-          .then((data) => {
-            return res.status(201).json(data);
-          })
-          .catch((err) => {
-            return res.status(500).json({ error: err.message });
+        const newNot = new Notification({
+          recipient: post.user.username,
+          sender: req.user,
+          post: post._id,
+          type: "commented",
+        });
+
+        if (req.user.username === post.user.username) {
+          newComment
+            .save()
+            .then((data) => {
+              return res.status(201).json(data);
+            })
+            .catch((err) => {
+              return res.status(500).json({ error: err.message });
+            });
+        } else {
+          newNot.save().then(() => {
+            newComment
+              .save()
+              .then((data) => {
+                return res.status(201).json(data);
+              })
+              .catch((err) => {
+                return res.status(500).json({ error: err.message });
+              });
           });
+        }
       });
     }
   });
@@ -65,7 +85,20 @@ export const deleteComment = (req, res) => {
           post.commentCount -= 1;
           post.save().then(() => {
             comment.delete().then(() => {
-              return res.json({ success: "Comment was deleted successfully" });
+              Notification.findOne({
+                "sender.username": req.user.username,
+                recipient: post.user.username,
+                post: post._id,
+                type: "commented",
+              })
+                .then((not) => {
+                  not.delete();
+                })
+                .then(() => {
+                  return res.json({
+                    success: "Comment was deleted successfully",
+                  });
+                });
             });
           });
         });

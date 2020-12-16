@@ -43,8 +43,17 @@ export const followUser = (req, res) => {
               newFollow.save().then(() => {
                 user.followerCount += 1;
                 user.save().then(() => {
-                  return res.json({
-                    success: "Follow request sent successfully",
+                  const newNot = new Notification({
+                    sender: req.user,
+                    recipient: user.username,
+                    post: user._id,
+                    type: "wants to follow",
+                  });
+
+                  newNot.save().then(() => {
+                    return res.json({
+                      success: "Follow request sent successfully",
+                    });
                   });
                 });
               });
@@ -72,11 +81,23 @@ export const followUser = (req, res) => {
 
               newFollow.save().then(() => {
                 user.followerCount += 1;
-                user.save().then(() => {
-                  return res.json({
-                    success: "User was followed successfully",
-                  });
+
+                const newNot = new Notification({
+                  sender: req.user,
+                  recipient: user.username,
+                  post: user._id,
+                  type: "start following",
                 });
+                newNot
+                  .save()
+                  .then(() => {
+                    user.save();
+                  })
+                  .then(() => {
+                    return res.json({
+                      success: "User was followed successfully",
+                    });
+                  });
               });
             }
           });
@@ -99,9 +120,18 @@ export const acceptFollowRequest = (req, res) => {
         follow.isAccept = true;
 
         follow.save().then(() => {
-          return res
-            .status(200)
-            .json({ success: "Follow request accepted successfully" });
+          Notification.findOne({
+            type: "wants to follow",
+            recipient: req.user.username,
+            "sender.username": follow.follower,
+          }).then((not) => {
+            not.type = "start following";
+            not.save().then(() => {
+              return res
+                .status(200)
+                .json({ success: "Follow request accepted successfully" });
+            });
+          });
         });
       }
     }
@@ -119,9 +149,17 @@ export const rejectFollowRequest = (req, res) => {
         return res.status(401).json({ error: "You cannot do this" });
       } else {
         follow.delete().then(() => {
-          return res
-            .status(200)
-            .json({ success: "Follow request deleted successfully" });
+          Notification.findOne({
+            "sender.username": follow.follower,
+            type: "wants to follow",
+            recipient: req.user.username,
+          }).then((not) => {
+            not.delete().then(() => {
+              return res
+                .status(200)
+                .json({ success: "Follow request deleted successfully" });
+            });
+          });
         });
       }
     }

@@ -1,6 +1,6 @@
-import Post from "../model/PostModel.js";
 import Comment from "../model/CommentModel.js";
-import Like from "../model/LikeModel.js";
+import Notification from "../model/NotificationModel.js";
+import Post from "../model/PostModel.js";
 
 export const replyComment = (req, res) => {
   const commentId = req.params.id;
@@ -17,8 +17,33 @@ export const replyComment = (req, res) => {
     } else {
       comment.replies.push(replyData);
 
-      comment.save().then((comment) => {
-        return res.status(201).json(comment);
+      if (req.user.username !== comment.user.username) {
+        const newNot = new Notification({
+          sender: req.user,
+          recipient: comment.user.username,
+          post: comment.post,
+          type: "replied",
+        });
+        newNot.save();
+      }
+
+      Post.findOne({ _id: comment.post }).then((post) => {
+        if (
+          post.user.username !== comment.user.username &&
+          post.user.username !== req.user.username
+        ) {
+          const newNot2 = new Notification({
+            sender: req.user,
+            recipient: comment.user.username,
+            post: post._id,
+            type: "commented",
+          });
+          newNot2.save();
+        }
+
+        comment.save().then((comment) => {
+          return res.status(201).json(comment);
+        });
       });
     }
   });
